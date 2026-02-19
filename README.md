@@ -10,14 +10,8 @@ This project is part of my learning path through modern data engineering:
 - ✅ Validate behavioral realism
 
 ### Phase 2: Data Collection
-- Set up extraction pipelines
-- Store messages, threads, timestamps locally
-- Traditional statistical analysis (message counts, active hours, response times)
 
 ### Phase 3: Apache Airflow
-- Orchestrate data pipelines
-- Schedule analysis runs (daily summaries, weekly reports)
-- Learn modern workflow management
 
 ### Phase 4: LLM Analysis
 - Profile individual "users" based on their messages
@@ -30,8 +24,6 @@ This project is part of my learning path through modern data engineering:
   - Storage on one system
   - Basic analysis on another  
   - LLM inference on a third (or distributed across multiple?)
-- Understand performance curves
-- Find the limits of local LLMs
 
 ## Features
 
