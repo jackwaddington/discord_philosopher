@@ -15,23 +15,31 @@ import pytz
 from dotenv import load_dotenv
 import subprocess
 import re
+import argparse
 
 # Load environment
 load_dotenv()
 
 class PhilosopherBot(commands.Bot):
-    def __init__(self, config):
+    def __init__(self, config, fast_mode=False):
         intents = discord.Intents.default()
         intents.message_content = True
         intents.messages = True
         
         super().__init__(command_prefix='!', intents=intents)
-        
+
         self.config = config
         self.profile = config['profile']
         self.personality = config['personality']
         self.behavior = config['behavior']
         self.llm_config = config['llm_config']
+        self.fast_mode = fast_mode
+
+        if fast_mode:
+            self.behavior['response_delay_min'] = 3
+            self.behavior['response_delay_max'] = 5
+            self.behavior['reply_probability'] = 1.0
+            print("⚡ FAST MODE: delays=5s, always replies")
         
         # Stalker mode
         self.is_stalker = 'stalker_config' in config
@@ -90,11 +98,12 @@ class PhilosopherBot(commands.Bot):
     
     async def should_respond(self, message):
         """Decide if bot should respond to this message"""
-        
-        # Don't respond if not in active hours
-        local_hour = datetime.now(self.tz).hour
-        if not (self.behavior['active_hours'][0] <= local_hour <= self.behavior['active_hours'][1]):
-            return False
+
+        # Don't respond if not in active hours (skipped in fast mode)
+        if not self.fast_mode:
+            local_hour = datetime.now(self.tz).hour
+            if not (self.behavior['active_hours'][0] <= local_hour <= self.behavior['active_hours'][1]):
+                return False
         
         # Stalker mode: prioritize target
         if self.is_stalker and message.author.name == self.stalker_target:
@@ -216,11 +225,15 @@ def load_config():
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--fast', action='store_true', help='Fast mode: minimal delays, always replies')
+    args = parser.parse_args()
+
     print("=" * 60)
     print("Discord Philosophers - Synthetic Discourse Generator")
     print("=" * 60)
     print()
-    
+
     # Load config
     try:
         config = load_config()
@@ -230,9 +243,9 @@ def main():
         print("1. You have a .env file with DISCORD_TOKEN")
         print("2. You've enabled one philosopher in config/philosophers.yaml")
         return
-    
+
     # Create and run bot
-    bot = PhilosopherBot(config)
+    bot = PhilosopherBot(config, fast_mode=args.fast)
     
     try:
         bot.run(config['discord_token'])
