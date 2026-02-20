@@ -22,9 +22,9 @@ marcus_aurelius:
     
   behavior:
     active_hours: [6, 23]  # Local time (6am to 11pm)
-    response_delay_min: 1200  # 20 minutes in seconds
-    response_delay_max: 2400  # 40 minutes
-    reply_probability: 0.75
+    response_delay_min: 1800  # 30 minutes in seconds
+    response_delay_max: 3600  # 60 minutes (deliberate, measured)
+    reply_probability: 0.6
     initiate_thread_probability: 0.2
     emoji_frequency: 0.1
     typo_rate: 0.02
@@ -71,9 +71,9 @@ diogenes:
     
   behavior:
     active_hours: [9, 25]  # Irregular schedule like a cynic
-    response_delay_min: 600   # 10 minutes
-    response_delay_max: 1500  # 25 minutes
-    reply_probability: 0.8
+    response_delay_min: 60    # 1 minute
+    response_delay_max: 180   # 3 minutes (fires back immediately)
+    reply_probability: 0.85
     initiate_thread_probability: 0.3
     emoji_frequency: 0.15
     typo_rate: 0.03
@@ -454,9 +454,9 @@ rumi:
     
   behavior:
     active_hours: [5, 23]  # Prayer times included
-    response_delay_min: 2400  # 40 minutes
-    response_delay_max: 4800  # 80 minutes (meditative)
-    reply_probability: 0.6
+    response_delay_min: 300   # 5 minutes
+    response_delay_max: 900   # 15 minutes (inspired, flows when moved)
+    reply_probability: 0.7
     initiate_thread_probability: 0.15
     emoji_frequency: 0.3
     typo_rate: 0.01
