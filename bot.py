@@ -13,7 +13,6 @@ import random
 from datetime import datetime
 import pytz
 from dotenv import load_dotenv
-import subprocess
 import re
 import argparse
 
@@ -36,10 +35,10 @@ class PhilosopherBot(commands.Bot):
         self.fast_mode = fast_mode
 
         if fast_mode:
-            self.behavior['response_delay_min'] = 3
-            self.behavior['response_delay_max'] = 5
+            self.behavior['response_delay_min'] = 30
+            self.behavior['response_delay_max'] = 60
             self.behavior['reply_probability'] = 1.0
-            print("⚡ FAST MODE: delays=5s, always replies")
+            print("⚡ FAST MODE: delays=30-60s, always replies")
         
         # Stalker mode
         self.is_stalker = 'stalker_config' in config
@@ -61,8 +60,8 @@ class PhilosopherBot(commands.Bot):
         print()
         
     async def on_message(self, message):
-        # Ignore own messages
-        if message.author == self.user:
+        # Ignore own messages and other bots
+        if message.author == self.user or message.author.bot:
             return
             
         # Update context
@@ -137,27 +136,34 @@ Respond as {self.profile['name']}, staying true to your philosophical character.
 Keep it conversational (2-4 sentences usually). Be authentic to your philosophy.
 """
 
-        # Call Ollama locally
+        # Call Ollama via HTTP API
         try:
-            result = subprocess.run(
-                [
-                    'ollama', 'run', self.llm_config['model'],
-                    '--system', self.llm_config['system_prompt'],
-                    prompt
-                ],
-                capture_output=True,
-                text=True,
-                timeout=120
+            import urllib.request
+            import json
+
+            payload = json.dumps({
+                'model': self.llm_config['model'],
+                'system': self.llm_config['system_prompt'],
+                'prompt': prompt,
+                'stream': False,
+                'options': {'temperature': self.llm_config.get('temperature', 0.8)}
+            }).encode()
+
+            req = urllib.request.Request(
+                'http://localhost:11434/api/generate',
+                data=payload,
+                headers={'Content-Type': 'application/json'}
             )
-            
-            response = result.stdout.strip()
-            
-            # Fallback if empty
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                data = json.loads(resp.read())
+                response = data.get('response', '').strip()
+
             if not response:
+                print("   ⚠️ Ollama returned empty response")
                 response = self.get_fallback_response()
-                
+
             return response
-            
+
         except Exception as e:
             print(f"   ⚠️ LLM error: {e}")
             return self.get_fallback_response()

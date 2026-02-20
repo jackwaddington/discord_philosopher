@@ -107,7 +107,11 @@ marcus_aurelius:
 ### 4. Run
 
 ```bash
+# Normal mode (realistic delays)
 python bot.py
+
+# Fast mode (for testing - 5 second delays, always replies, ignores active hours)
+python bot.py --fast
 ```
 
 You should see:
@@ -185,6 +189,7 @@ Check:
 1. Is it during the bot's active hours? (See `behavior.active_hours` in config)
 2. Is the bot's `reply_probability` low? (Try setting to 1.0 for testing)
 3. Check the console for errors
+4. Use `python bot.py --fast` to bypass all delays and active hours for quick testing
 
 ### Response quality is poor
 Try:
