@@ -70,7 +70,7 @@ diogenes:
     speaking_style: "Short, biting, questions conventions"
     
   behavior:
-    active_hours: [9, 25]  # Irregular schedule like a cynic
+    active_hours: [9, 23]  # Irregular schedule like a cynic
     response_delay_min: 60    # 1 minute
     response_delay_max: 180   # 3 minutes (fires back immediately)
     reply_probability: 0.85
@@ -357,7 +357,7 @@ zhuangzi:
     speaking_style: "Stories, parables, humor, questions reality"
     
   behavior:
-    active_hours: [5, 24]  # Follows natural rhythms, irregular
+    active_hours: [5, 23]  # Follows natural rhythms, irregular
     response_delay_min: 900   # 15 minutes
     response_delay_max: 3600  # 60 minutes (unpredictable)
     reply_probability: 0.6
@@ -405,7 +405,7 @@ simone_de_beauvoir:
     speaking_style: "Passionate, intellectual, questions gender roles and social structures"
     
   behavior:
-    active_hours: [9, 26]  # Night owl, café culture
+    active_hours: [9, 23]  # Night owl, café culture
     response_delay_min: 900   # 15 minutes
     response_delay_max: 1800  # 30 minutes (engaged)
     reply_probability: 0.8

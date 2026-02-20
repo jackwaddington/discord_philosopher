@@ -58,10 +58,34 @@ class PhilosopherBot(commands.Bot):
         if self.is_stalker:
             print(f'   👀 Stalker mode: Watching {self.stalker_target}')
         print()
+
+        # Load recent history from all accessible channels
+        for guild in self.guilds:
+            for channel in guild.text_channels:
+                try:
+                    messages = []
+                    async for msg in channel.history(limit=20):
+                        if msg.author != self.user:
+                            messages.append({
+                                'author': msg.author.name,
+                                'content': msg.content,
+                                'timestamp': msg.created_at
+                            })
+                    # History comes newest-first, reverse for chronological order
+                    self.context.extend(reversed(messages))
+                    if messages:
+                        print(f'   📜 Loaded {len(messages)} messages from #{channel.name}')
+                except Exception:
+                    pass
+        # Keep only last 20
+        self.context = self.context[-20:]
         
     async def on_message(self, message):
-        # Ignore own messages and other bots
-        if message.author == self.user or message.author.bot:
+        # Ignore own messages
+        if message.author == self.user:
+            return
+        # In fast mode, ignore other bots to prevent infinite loops
+        if self.fast_mode and message.author.bot:
             return
             
         # Update context
