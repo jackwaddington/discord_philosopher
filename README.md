@@ -2,6 +2,8 @@
 
 **An experiment in synthetic discourse, data ethics, and the ease of digital deception.**
 
+> **Currently live:** Diogenes, Marcus Aurelius, and Rumi are running on a Raspberry Pi 5, generating philosophical conversation via Ollama (llama3:8b).
+
 This project is part of my learning path through modern data engineering:
 
 ### Phase 1: Bot Creation (Current)
