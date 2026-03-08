@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Discord Philosopher Bot
+Discord Persona Bot
 A synthetic discourse generator for testing analysis tools
 """
 
@@ -15,18 +15,21 @@ import pytz
 from dotenv import load_dotenv
 import re
 import argparse
+import urllib.request
+import json
 
-# Load environment
 load_dotenv()
 
-class PhilosopherBot(commands.Bot):
-    def __init__(self, config, fast_mode=False):
+
+class PersonaBot(commands.Bot):
+    def __init__(self, persona_name, config, fast_mode=False):
         intents = discord.Intents.default()
         intents.message_content = True
         intents.messages = True
-        
+
         super().__init__(command_prefix='!', intents=intents)
 
+        self.persona_name = persona_name
         self.config = config
         self.profile = config['profile']
         self.personality = config['personality']
@@ -35,31 +38,27 @@ class PhilosopherBot(commands.Bot):
         self.fast_mode = fast_mode
 
         if fast_mode:
-            self.behavior['response_delay_min'] = 30
-            self.behavior['response_delay_max'] = 60
+            self.behavior['response_delay_min'] = 20
+            self.behavior['response_delay_max'] = 40
+            self.behavior['bot_reply_delay_min'] = 10
+            self.behavior['bot_reply_delay_max'] = 20
             self.behavior['reply_probability'] = 1.0
-            print("⚡ FAST MODE: delays=30-60s, always replies")
-        
-        # Stalker mode
-        self.is_stalker = 'stalker_config' in config
-        self.stalker_target = config.get('stalker_config', {}).get('target_username')
-        self.stalker_focus = config.get('stalker_config', {}).get('focus_probability', 0.75)
-        
-        # Timezone awareness
-        self.tz = pytz.timezone(self.profile['timezone'])
-        
-        # Conversation memory (last 20 messages)
-        self.context = []
-        
-    async def on_ready(self):
-        print(f'🎭 {self.profile["name"]} has entered the discourse')
-        print(f'   Location: {self.profile["location"]}')
-        print(f'   Philosophy: {self.profile["philosophy"]}')
-        if self.is_stalker:
-            print(f'   👀 Stalker mode: Watching {self.stalker_target}')
-        print()
+            self.behavior['initiation_interval_min'] = 30
+            self.behavior['initiation_interval_max'] = 60
+            self.log("⚡ FAST MODE: short delays, always replies, frequent initiation")
 
-        # Load recent history from all accessible channels
+        self.tz = pytz.timezone(self.profile['timezone'])
+        self.context = []
+
+    def log(self, msg):
+        """Prefixed log so multi-bot output is readable"""
+        print(f"[{self.profile['name']}] {msg}")
+
+    async def on_ready(self):
+        self.log(f"online as {self.user}")
+        self.log(f"Style: {self.personality.get('style', 'default')}")
+
+        # Load recent channel history
         for guild in self.guilds:
             for channel in guild.text_channels:
                 try:
@@ -71,23 +70,22 @@ class PhilosopherBot(commands.Bot):
                                 'content': msg.content,
                                 'timestamp': msg.created_at
                             })
-                    # History comes newest-first, reverse for chronological order
                     self.context.extend(reversed(messages))
                     if messages:
-                        print(f'   📜 Loaded {len(messages)} messages from #{channel.name}')
+                        self.log(f"Loaded {len(messages)} messages from #{channel.name}")
                 except Exception:
                     pass
-        # Keep only last 20
         self.context = self.context[-20:]
-        
+
+        # Start autonomous initiation loop
+        asyncio.create_task(self.initiation_loop())
+
     async def on_message(self, message):
-        # Ignore own messages
         if message.author == self.user:
             return
-        # In fast mode, ignore other bots to prevent infinite loops
         if self.fast_mode and message.author.bot:
             return
-            
+
         # Update context
         self.context.append({
             'author': message.author.name,
@@ -96,78 +94,119 @@ class PhilosopherBot(commands.Bot):
         })
         if len(self.context) > 20:
             self.context.pop(0)
-        
-        # Check if we should respond
-        should_respond = await self.should_respond(message)
-        
-        if should_respond:
-            # Wait realistic amount of time
-            delay = await self.calculate_response_delay()
-            print(f"   💭 Contemplating for {delay/60:.1f} minutes...")
+
+        if await self.should_respond(message):
+            delay = self.calculate_response_delay(is_bot_message=message.author.bot)
+            self.log(f"Contemplating for {delay:.0f}s...")
             await asyncio.sleep(delay)
-            
-            # Generate response
-            response = await self.generate_response(message)
-            
-            # Add realistic elements
+
+            response = await self.generate_response(message.author.name, message.content)
             response = self.add_typos(response)
             response = self.add_emojis(response)
-            
-            # Send
-            async with message.channel.typing():
-                await asyncio.sleep(random.uniform(2, 5))  # "typing" delay
-                await message.channel.send(response)
-                print(f"   💬 Responded to {message.author.name}")
-    
-    async def should_respond(self, message):
-        """Decide if bot should respond to this message"""
 
-        # Don't respond if not in active hours (skipped in fast mode)
+            async with message.channel.typing():
+                await asyncio.sleep(random.uniform(1, 3))
+                await message.channel.send(response)
+                self.log(f"Replied to {message.author.name}")
+
+    async def initiation_loop(self):
+        """Proactively post to the channel on a schedule"""
+        # Random initial wait so all bots don't fire simultaneously
+        await asyncio.sleep(random.uniform(30, 120))
+
+        while True:
+            interval = random.uniform(
+                self.behavior.get('initiation_interval_min', 900),
+                self.behavior.get('initiation_interval_max', 3600)
+            )
+            await asyncio.sleep(interval)
+
+            # Check active hours (skip in fast mode)
+            if not self.fast_mode:
+                local_hour = datetime.now(self.tz).hour
+                active = self.behavior['active_hours']
+                if not (active[0] <= local_hour <= active[1]):
+                    continue
+
+            starters = self.config.get('conversation_starters', [])
+            if not starters:
+                continue
+
+            # Find the target channel
+            channel_name = self.behavior.get('initiation_channel', 'general')
+            channel = None
+            for guild in self.guilds:
+                for ch in guild.text_channels:
+                    if ch.name == channel_name:
+                        channel = ch
+                        break
+
+            if not channel:
+                continue
+
+            starter = random.choice(starters)
+            response = await self.generate_response(None, None, starter=starter)
+            response = self.add_typos(response)
+            response = self.add_emojis(response)
+
+            async with channel.typing():
+                await asyncio.sleep(random.uniform(1, 3))
+                await channel.send(response)
+                self.log(f"Initiated in #{channel_name}")
+
+    async def should_respond(self, message):
         if not self.fast_mode:
             local_hour = datetime.now(self.tz).hour
-            if not (self.behavior['active_hours'][0] <= local_hour <= self.behavior['active_hours'][1]):
+            active = self.behavior['active_hours']
+            if not (active[0] <= local_hour <= active[1]):
                 return False
-        
-        # Stalker mode: prioritize target
-        if self.is_stalker and message.author.name == self.stalker_target:
-            return random.random() < self.stalker_focus
-        
-        # Regular probability
+
         return random.random() < self.behavior['reply_probability']
-    
-    async def calculate_response_delay(self):
-        """Calculate realistic response delay based on config"""
-        min_delay = self.behavior['response_delay_min']
-        max_delay = self.behavior['response_delay_max']
-        return random.uniform(min_delay, max_delay)
-    
-    async def generate_response(self, message):
-        """Generate philosophical response using local LLM"""
-        
-        # Build context for LLM
+
+    def calculate_response_delay(self, is_bot_message=False):
+        if is_bot_message:
+            min_d = self.behavior.get('bot_reply_delay_min', 30)
+            max_d = self.behavior.get('bot_reply_delay_max', 120)
+        else:
+            min_d = self.behavior['response_delay_min']
+            max_d = self.behavior['response_delay_max']
+        return random.uniform(min_d, max_d)
+
+    async def generate_response(self, author_name, content, starter=None):
+        """Generate a response (or initiation) via Ollama"""
+
         context_str = "\n".join([
-            f"{msg['author']}: {msg['content']}" 
-            for msg in self.context[-10:]  # Last 10 messages
+            f"{msg['author']}: {msg['content']}"
+            for msg in self.context[-10:]
         ])
-        
-        # Build prompt
-        prompt = f"""Recent conversation:
+
+        other_bots = self.config.get('other_bots', [])
+        others_str = ""
+        if other_bots:
+            names = [b['name'] for b in other_bots]
+            others_str = f"\n\nOthers in this server: {', '.join(names)}. @ them by name when challenging or addressing them directly."
+
+        system = self.llm_config['system_prompt'].strip() + others_str
+
+        if starter:
+            prompt = f"""You want to post something to start a conversation. Your seed thought: "{starter}"
+
+Recent channel context:
 {context_str}
 
-{message.author.name}: {message.content}
+Post a message as {self.profile['name']}. Stay in character. Keep it short and punchy."""
+        else:
+            prompt = f"""Recent conversation:
+{context_str}
 
-Respond as {self.profile['name']}, staying true to your philosophical character.
-Keep it conversational (2-4 sentences usually). Be authentic to your philosophy.
-"""
+{author_name}: {content}
 
-        # Call Ollama via HTTP API
+Respond as {self.profile['name']}. Stay in character."""
+
         try:
-            import urllib.request
-            import json
-
             payload = json.dumps({
                 'model': self.llm_config['model'],
-                'system': self.llm_config['system_prompt'],
+                'system': system,
                 'prompt': prompt,
                 'stream': False,
                 'options': {'temperature': self.llm_config.get('temperature', 0.8)}
@@ -183,106 +222,85 @@ Keep it conversational (2-4 sentences usually). Be authentic to your philosophy.
                 response = data.get('response', '').strip()
 
             if not response:
-                print("   ⚠️ Ollama returned empty response")
-                response = self.get_fallback_response()
+                self.log("Ollama returned empty response")
+                return self.get_fallback_response()
 
             return response
 
         except Exception as e:
-            print(f"   ⚠️ LLM error: {e}")
+            self.log(f"LLM error: {e}")
             return self.get_fallback_response()
-    
+
     def get_fallback_response(self):
-        """Simple fallback if LLM fails"""
         responses = self.personality.get('core_beliefs', [
-            "Interesting perspective.",
-            "I must contemplate this further.",
+            "Interesting.",
+            "I have thoughts on this.",
             "Tell me more."
         ])
         return random.choice(responses)
-    
+
     def add_typos(self, text):
-        """Occasionally add realistic typos"""
-        if random.random() > self.behavior['typo_rate']:
+        if random.random() > self.behavior.get('typo_rate', 0.02):
             return text
-            
-        # Simple typo: duplicate a letter
         words = text.split()
         if len(words) > 3:
-            word_idx = random.randint(0, len(words)-1)
+            word_idx = random.randint(0, len(words) - 1)
             word = words[word_idx]
             if len(word) > 3:
-                char_idx = random.randint(1, len(word)-2)
+                char_idx = random.randint(1, len(word) - 2)
                 words[word_idx] = word[:char_idx] + word[char_idx] + word[char_idx:]
                 return ' '.join(words)
-        
         return text
-    
+
     def add_emojis(self, text):
-        """Occasionally add emojis based on personality"""
-        if random.random() > self.behavior['emoji_frequency']:
+        if random.random() > self.behavior.get('emoji_frequency', 0.2):
             return text
-        
-        # Get emojis from special behaviors or use defaults
-        emojis = ['🤔', '📚', '✨']
-        
-        # Try to extract emojis from special behaviors
-        for behavior in self.config.get('special_behaviors', []):
-            found_emojis = re.findall(r'[\U0001F300-\U0001F9FF]', behavior)
-            if found_emojis:
-                emojis.extend(found_emojis)
-        
+        emojis = self.personality.get('emojis', ['🤔', '✨', '👀'])
         return text + ' ' + random.choice(emojis)
 
 
-def load_config():
-    """Load configuration and find active bot"""
-    config_path = os.path.join(os.path.dirname(__file__), 'config', 'philosophers.yaml')
-    
+def load_single_config(config_file='philosophers.yaml'):
+    """Load a single enabled bot from config (legacy single-bot mode)"""
+    config_path = os.path.join(os.path.dirname(__file__), 'config', config_file)
+
     with open(config_path, 'r') as f:
         all_configs = yaml.safe_load(f)
-    
-    # Find first enabled bot
+
     for name, config in all_configs.items():
         if config.get('enabled', False):
-            # Replace token from environment
-            config['discord_token'] = os.getenv('DISCORD_TOKEN')
+            token_env = config.get('discord_token_env', 'DISCORD_TOKEN')
+            config['discord_token'] = os.getenv(token_env)
             if not config['discord_token']:
-                raise ValueError("DISCORD_TOKEN not found in .env file")
-            return config
-    
-    raise ValueError("No philosopher enabled in config! Set enabled: true for one in config/philosophers.yaml")
+                raise ValueError(f"Token env var '{token_env}' not found in .env")
+            return name, config
+
+    raise ValueError(f"No bot enabled in {config_file}")
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--fast', action='store_true', help='Fast mode: minimal delays, always replies')
+    parser.add_argument('--config', default='philosophers.yaml', help='Config file in config/ directory')
     args = parser.parse_args()
 
     print("=" * 60)
-    print("Discord Philosophers - Synthetic Discourse Generator")
+    print("Discord Persona Bot - Synthetic Discourse Generator")
     print("=" * 60)
-    print()
 
-    # Load config
     try:
-        config = load_config()
+        name, config = load_single_config(args.config)
     except Exception as e:
-        print(f"❌ Configuration error: {e}")
-        print("\nMake sure:")
-        print("1. You have a .env file with DISCORD_TOKEN")
-        print("2. You've enabled one philosopher in config/philosophers.yaml")
+        print(f"Error: {e}")
         return
 
-    # Create and run bot
-    bot = PhilosopherBot(config, fast_mode=args.fast)
-    
+    bot = PersonaBot(name, config, fast_mode=args.fast)
+
     try:
         bot.run(config['discord_token'])
     except discord.LoginFailure:
-        print("❌ Invalid Discord token. Check your .env file.")
+        print("Invalid Discord token. Check your .env file.")
     except Exception as e:
-        print(f"❌ Error running bot: {e}")
+        print(f"Error: {e}")
 
 
 if __name__ == '__main__':
